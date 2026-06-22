@@ -20,9 +20,15 @@ class CepService
             return null;
         }
 
-        return Cache::remember("cep_data_{$cep}", 86400 * 30, function () use ($cep): ?array {
+        try {
+            return Cache::remember("cep_data_{$cep}", 86400 * 30, function () use ($cep): ?array {
+                return self::fetchFromApis($cep);
+            });
+        } catch (Throwable) {
+            // Some cache stores (e.g. a non-tagging store under tenant cache tagging) throw;
+            // degrade gracefully to a direct lookup instead of bubbling up.
             return self::fetchFromApis($cep);
-        });
+        }
     }
 
     /**
