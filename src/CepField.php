@@ -38,7 +38,18 @@ class CepField extends TextInput
 
         $this->mask('99999-999');
         $this->placeholder('59000-000');
-        $this->minLength(9);
+
+        // The mask is presentation only. Stripping it keeps the stored CEP as digits, so the
+        // value has a single representation for lookups, comparisons and for APIs that reject
+        // formatted input. Filament registers a state cast for this, so the state that gets
+        // validated and dehydrated is already unmasked.
+        $this->stripCharacters(['-']);
+
+        // Length is checked against that unmasked state: 8 digits, not the 9 characters the
+        // mask renders. The previous `minLength(9)` was counting the mask, so pairing it with
+        // stripping would have rejected every valid CEP.
+        $this->minLength(8);
+        $this->maxLength(8);
 
         $this->suffixAction(
             Action::make('search_cep')
