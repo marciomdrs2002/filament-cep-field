@@ -46,10 +46,20 @@ class CepField extends TextInput
         $this->stripCharacters(['-']);
 
         // Length is checked against that unmasked state: 8 digits, not the 9 characters the
-        // mask renders. The previous `minLength(9)` was counting the mask, so pairing it with
-        // stripping would have rejected every valid CEP.
-        $this->minLength(8);
-        $this->maxLength(8);
+        // mask renders. A rule, not minLength()/maxLength(): those also render as HTML
+        // minlength/maxlength, which the browser counts against the masked text, so
+        // maxlength="8" stopped typing at "59000-00" and no complete CEP could be entered.
+        $this->rule('digits:8');
+
+        // Lookup runs on its own once the typing pauses on a complete CEP, and the
+        // magnifier stays for retrying after a failure. Partial input is ignored so the
+        // debounce does not hit the APIs or flash "not found" mid-typing.
+        $this->live(debounce: 600);
+        $this->afterStateUpdated(function ($state, Set $set): void {
+            if (strlen(preg_replace('/\D/', '', (string) $state)) === 8) {
+                $this->fillAddress($state, $set);
+            }
+        });
 
         $this->suffixAction(
             Action::make('search_cep')
@@ -59,44 +69,49 @@ class CepField extends TextInput
                         return;
                     }
 
-                    try {
-                        $data = CepService::find($state);
-
-                        if ($data) {
-                            $set($this->streetField, $data['street']);
-
-                            if ($this->neighborhoodField !== null) {
-                                $set($this->neighborhoodField, $data['neighborhood'] ?? null);
-                            }
-
-                            $set($this->cityField, $data['city']);
-                            $set($this->stateField, $data['state']);
-
-                            return;
-                        }
-
-                        $set($this->streetField, null);
-
-                        if ($this->neighborhoodField !== null) {
-                            $set($this->neighborhoodField, null);
-                        }
-
-                        $set($this->cityField, null);
-                        $set($this->stateField, null);
-
-                        Notification::make()
-                            ->title('CEP não encontrado')
-                            ->body('Verifique se o CEP está correto ou tente novamente mais tarde.')
-                            ->danger()
-                            ->send();
-                    } catch (Throwable) {
-                        Notification::make()
-                            ->title('Erro ao consultar CEP')
-                            ->body('Ocorreu um problema ao consultar o CEP. Tente novamente em alguns instantes.')
-                            ->danger()
-                            ->send();
-                    }
+                    $this->fillAddress($state, $set);
                 })
         );
+    }
+
+    protected function fillAddress(?string $cep, Set $set): void
+    {
+        try {
+            $data = CepService::find($cep);
+
+            if ($data) {
+                $set($this->streetField, $data['street']);
+
+                if ($this->neighborhoodField !== null) {
+                    $set($this->neighborhoodField, $data['neighborhood'] ?? null);
+                }
+
+                $set($this->cityField, $data['city']);
+                $set($this->stateField, $data['state']);
+
+                return;
+            }
+
+            $set($this->streetField, null);
+
+            if ($this->neighborhoodField !== null) {
+                $set($this->neighborhoodField, null);
+            }
+
+            $set($this->cityField, null);
+            $set($this->stateField, null);
+
+            Notification::make()
+                ->title('CEP não encontrado')
+                ->body('Verifique se o CEP está correto ou tente novamente mais tarde.')
+                ->danger()
+                ->send();
+        } catch (Throwable) {
+            Notification::make()
+                ->title('Erro ao consultar CEP')
+                ->body('Ocorreu um problema ao consultar o CEP. Tente novamente em alguns instantes.')
+                ->danger()
+                ->send();
+        }
     }
 }
