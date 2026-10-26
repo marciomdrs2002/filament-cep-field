@@ -72,8 +72,17 @@ class CepField extends TextInput
         // failure is editing the CEP again. Partial input is ignored so the debounce does not
         // hit the APIs or flash "not found" mid-typing.
         $this->live(debounce: 600);
-        $this->afterStateUpdated(function ($state, Set $set, Component $livewire): void {
-            if (strlen(preg_replace('/\D/', '', (string) $state)) === 8) {
+        $this->afterStateUpdated(function ($state, $old, Set $set, Component $livewire): void {
+            $digits = preg_replace('/\D/', '', (string) $state);
+
+            // The mask rewrites a stored "01001000" as "01001-000" on page load, which Livewire
+            // sends as a change with the next request (any tab or action). Same digits is not an
+            // edit: looking it up again would overwrite, or on a miss clear, the saved address.
+            if ($digits === preg_replace('/\D/', '', (string) $old)) {
+                return;
+            }
+
+            if (strlen($digits) === 8) {
                 $this->fillAddress($state, $set, $livewire);
             }
         });
